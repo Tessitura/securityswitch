@@ -7,6 +7,7 @@
 // warranties of merchantability and/or fitness for a particular purpose.
 // =================================================================================
 using System;
+using System.Security.Cryptography.X509Certificates;
 using System.Web;
 using System.Web.Configuration;
 
@@ -18,10 +19,13 @@ namespace SecuritySwitch {
 	/// <summary>
 	/// Evaluates each request for the need to switch to HTTP/HTTPS.
 	/// </summary>
-	public class SecuritySwitchModule : IHttpModule {
-		private Settings _settings;
-		private RequestProcessor _requestProcessor;
+	public class SecuritySwitchModule : IHttpModule
+	{
+	    private static Settings _settings { get; set; }
 
+        private RequestProcessor _requestProcessor;
+
+	    private static SecuritySwitchModule _module;
 
 		/// <summary>
 		/// Raised before the SecureSwitchModule evaluates the current request to allow subscribers a chance to evaluate the request.
@@ -36,7 +40,10 @@ namespace SecuritySwitch {
 		/// An <see cref="T:System.Web.HttpApplication"/> that provides access to the methods, properties, and events common to 
 		/// all application objects within an ASP.NET application.
 		/// </param>
-		public void Init(HttpApplication context) {
+		public void Init(HttpApplication context)
+		{
+		    _module = this;
+
 			if (context == null) {
 				Logger.Log("No HttpApplication supplied.", Logger.LogLevel.Warn);
 				return;
@@ -44,30 +51,56 @@ namespace SecuritySwitch {
 
 			Logger.Log("Begin module initialization.");
 
-			// Get the settings for the securitySwitch section.
-			Logger.Log("Getting securitySwitch configuration section.", Logger.LogLevel.Info);
-			_settings = WebConfigurationManager.GetSection("securitySwitch") as Settings;
-			if (_settings == null || _settings.Mode == Mode.Off) {
-				Logger.LogFormat("{0}; module not activated.", Logger.LogLevel.Info, _settings == null ? "No settings provided" : "Mode is Off");
-				return;
-			}
+            // Get the settings for the securitySwitch section.
+            Logger.Log("Getting securitySwitch configuration section.", Logger.LogLevel.Info);
 
-			Logger.Log("Creating RequestProcessor.");
-			_requestProcessor = new RequestProcessor(_settings);
+		    if (_settings == null)
+		    {
+                _settings = WebConfigurationManager.GetSection("securitySwitch") as Settings;
+            }
 
-			// Hook the application's AcquireRequestState event.
-			// * This ensures that the session ID is available for cookie-less session processing.
-			// * I would rather hook sooner into the pipeline, but...
-			// * It just is not possible (that I know of) to get the original URL requested when cookie-less sessions are used.
-			//   The Framework uses RewritePath when the HttpContext is created to strip the Session ID from the request's 
-			//   Path/Url. The rewritten URL is actually stored in an internal field of HttpRequest; short of reflection, 
-			//   it's not obtainable.
-			// WARNING: Do not access the Form collection of the HttpRequest object to avoid weird issues with post-backs from the application root.
-			Logger.Log("Adding handler for the application's 'AcquireRequestState' event.");
-			context.AcquireRequestState += ProcessRequest;
-
-			Logger.Log("End module initialization.");
+            Load(context);
 		}
+
+	    public static void Configure(Settings settings)
+	    {
+	        _settings = settings;
+
+            Load(null);
+	    }
+
+
+	    private static void Load(HttpApplication context)
+	    {
+            if (context != null)
+            {
+                // Hook the application's AcquireRequestState event.
+                // * This ensures that the session ID is available for cookie-less session processing.
+                // * I would rather hook sooner into the pipeline, but...
+                // * It just is not possible (that I know of) to get the original URL requested when cookie-less sessions are used.
+                //   The Framework uses RewritePath when the HttpContext is created to strip the Session ID from the request's 
+                //   Path/Url. The rewritten URL is actually stored in an internal field of HttpRequest; short of reflection, 
+                //   it's not obtainable.
+                // WARNING: Do not access the Form collection of the HttpRequest object to avoid weird issues with post-backs from the application root.
+
+                Logger.Log("Adding handler for the application's 'AcquireRequestState' event.");
+                context.AcquireRequestState += _module.ProcessRequest;
+            }
+
+            if (_settings == null)
+            {
+                Logger.LogFormat("{0}; module not activated.", Logger.LogLevel.Info, _settings == null ? "No settings provided" : "Mode is Off");
+                return;
+            }
+            
+	        if (_module != null)
+	        {
+                Logger.Log("Creating RequestProcessor.");
+                _module._requestProcessor = new RequestProcessor(_settings);
+	        }
+
+	        Logger.Log("End module initialization.");
+        }
 
 		/// <summary>
 		/// Disposes of the resources (other than memory) used by the module that implements <see cref="T:System.Web.IHttpModule"/>.
@@ -104,9 +137,15 @@ namespace SecuritySwitch {
 				return;
 			}
 
+		    if (_settings?.Mode == Mode.Off)
+		    {
+		        return;
+		    }
+
 			// Wrap the application's context (for testability) and process the request.
 			var context = new HttpContextWrapper(application.Context);
-			_requestProcessor.Process(context, EvaluatorCallback);
+            
+			_requestProcessor?.Process(context, EvaluatorCallback);
 		}
 
 		/// <summary>

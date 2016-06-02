@@ -152,12 +152,23 @@ namespace SecuritySwitch.Configuration {
 			set { this[ElementNames.OffloadedSecurityServerVariables] = (!string.IsNullOrEmpty(value) ? value : null); }
 		}
 
+	    private PathSettingCollection _paths;
+
 		/// <summary>
 		/// Gets the collection of path settings read from the configuration section.
 		/// </summary>
 		[ConfigurationProperty(ElementNames.Paths, IsDefaultCollection = true, IsRequired = false)]
 		public PathSettingCollection Paths {
-			get { return (PathSettingCollection)this[ElementNames.Paths]; }
+		    get
+		    {
+		        if (_paths == null)
+		        {
+		            _paths = (PathSettingCollection)this[ElementNames.Paths];
+		        }
+
+                return _paths;
+		    }
+		    set { _paths = value; }
 		}
 
 		/// <summary>

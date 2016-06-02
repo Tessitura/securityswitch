@@ -57,6 +57,6 @@ namespace SecuritySwitch.Configuration {
 		/// <summary>
 		/// Creates an instance of PathSetting.
 		/// </summary>
-		protected internal PathSetting() {}
+		public PathSetting() {}
 	}
 }

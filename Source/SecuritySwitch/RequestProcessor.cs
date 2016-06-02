@@ -36,7 +36,7 @@ namespace SecuritySwitch {
 			Logger.Log("Begin request processing.");
 
 			RequestSecurity expectedSecurity = EvaluateRequestViaCallbackOrEvaluator(context, evaluatorCallback);
-			if (expectedSecurity == RequestSecurity.Ignore) {
+			if (expectedSecurity == RequestSecurity.Ignore || expectedSecurity == RequestSecurity.Insecure) {
 				// No redirect is needed for a result of Ignore.
 				EnrichResponse(context, _settings);
 				Logger.Log("Expected security is Ignore; done.", Logger.LogLevel.Info);
